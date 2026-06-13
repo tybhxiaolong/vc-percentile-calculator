@@ -95,7 +95,7 @@
       <div>
         <h1>肺活量百分位计算器</h1>
       </div>
-      <div class="meta">基于 6-19 岁儿童青少年三维肺活量参考表；变量包含年龄、性别、身高和实测肺活量。</div>
+      <div class="meta">基于 6-19 岁儿童青少年三维肺活量参考表；输入出生日期、测试日期、性别、身高和实测肺活量。</div>
     </header>
 
     <section class="layout">
@@ -109,17 +109,23 @@
         </div>
         <div class="row">
           <div class="field">
-            <label for="age">年龄（岁）</label>
-            <input id="age" type="number" min="6" max="19" step="0.1" value="12" required>
+            <label for="birthDate">出生日期</label>
+            <input id="birthDate" type="date" value="2014-01-01" required>
           </div>
+          <div class="field">
+            <label for="testDate">测试日期</label>
+            <input id="testDate" type="date" value="2026-01-01" required>
+          </div>
+        </div>
+        <div class="row">
           <div class="field">
             <label for="height">身高（cm）</label>
             <input id="height" type="number" min="90" max="210" step="0.1" value="150" required>
           </div>
-        </div>
-        <div class="field">
-          <label for="vc">肺活量（mL）</label>
-          <input id="vc" type="number" min="100" max="9000" step="1" value="2500" required>
+          <div class="field">
+            <label for="vc">肺活量（mL）</label>
+            <input id="vc" type="number" min="100" max="9000" step="1" value="2500" required>
+          </div>
         </div>
         <div class="actions">
           <button class="primary" type="submit">计算</button>
@@ -217,6 +223,25 @@
       return { level: '优秀', score: p };
     }
 
+    function parseDate(value, label) {
+      if (!value) throw new Error(`请选择${label}。`);
+      const parts = value.split('-').map(Number);
+      if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) throw new Error(`${label}格式无效。`);
+      const date = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) {
+        throw new Error(`${label}格式无效。`);
+      }
+      return date;
+    }
+
+    function ageFromDates(birthValue, testValue) {
+      const birthDate = parseDate(birthValue, '出生日期');
+      const testDate = parseDate(testValue, '测试日期');
+      if (testDate <= birthDate) throw new Error('测试日期需晚于出生日期。');
+      const dayMs = 24 * 60 * 60 * 1000;
+      return (testDate - birthDate) / dayMs / 365.25;
+    }
+
     function fmt(n, digits = 0) { return Number(n).toLocaleString('zh-CN', { maximumFractionDigits: digits, minimumFractionDigits: digits }); }
 
     function renderResult(inputs, values, pResult, warnings) {
@@ -241,7 +266,9 @@
           </div>
           <div class="detail">
             <div class="metric"><span>性别</span><strong>${inputs.sex === 'male' ? '男' : '女'}</strong></div>
-            <div class="metric"><span>年龄</span><strong>${fmt(inputs.age, 1)} 岁</strong></div>
+            <div class="metric"><span>出生日期</span><strong>${inputs.birthDate}</strong></div>
+            <div class="metric"><span>测试日期</span><strong>${inputs.testDate}</strong></div>
+            <div class="metric"><span>计算年龄</span><strong>${fmt(inputs.age, 2)} 岁</strong></div>
             <div class="metric"><span>身高</span><strong>${fmt(inputs.height, 1)} cm</strong></div>
             <div class="metric"><span>肺活量</span><strong>${fmt(inputs.vc)} mL</strong></div>
           </div>
@@ -254,17 +281,19 @@
 
     function calculate() {
       const sex = document.getElementById('sex').value;
-      const age = Number(document.getElementById('age').value);
+      const birthDate = document.getElementById('birthDate').value;
+      const testDate = document.getElementById('testDate').value;
       const height = Number(document.getElementById('height').value);
       const vc = Number(document.getElementById('vc').value);
       const errorBox = document.getElementById('errorBox');
       errorBox.style.display = 'none';
       try {
+        const age = ageFromDates(birthDate, testDate);
         if (![age, height, vc].every(Number.isFinite)) throw new Error('请填写完整且有效的数字。');
         if (vc <= 0 || height <= 0) throw new Error('身高和肺活量需大于 0。');
         const curve = referenceCurve(sex, age, height);
         const pResult = percentileFromVc(curve.values, vc);
-        renderResult({ sex, age, height, vc }, curve.values, pResult, curve.warnings);
+        renderResult({ sex, birthDate, testDate, age, height, vc }, curve.values, pResult, curve.warnings);
       } catch (err) {
         errorBox.textContent = err.message;
         errorBox.style.display = 'block';
@@ -274,7 +303,8 @@
     document.getElementById('calcForm').addEventListener('submit', event => { event.preventDefault(); calculate(); });
     document.getElementById('resetBtn').addEventListener('click', () => {
       document.getElementById('sex').value = 'male';
-      document.getElementById('age').value = '12';
+      document.getElementById('birthDate').value = '2014-01-01';
+      document.getElementById('testDate').value = '2026-01-01';
       document.getElementById('height').value = '150';
       document.getElementById('vc').value = '2500';
       calculate();
